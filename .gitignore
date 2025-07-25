@@ -1,0 +1,8 @@
+*.exe
+*.txt
+
+__pycache__/
+*.pyc
+
+out/*
+!out/.keep

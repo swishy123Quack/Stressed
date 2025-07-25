@@ -1,0 +1,252 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import Process, Manager
+import subprocess
+import shutil
+import time
+import math
+import sys
+import os
+
+ARGUMENTS = '-Wall -std=c++20 -g'
+
+MAX_TESTS = 100
+MAX_PARALLEL_PROCESSES = 2
+
+SOLUTION_TIMELIMIT = 10.0
+BRUTE_TIMELIMIT = 10.0
+GENERATOR_TIMELIMIT = 10.0
+CHECKER_TIMELIMIT = 10.0
+
+BINARY_PATH = 'bin'
+LOG_PATH = 'logs'
+OUTPUT_PATH = 'out'
+OLD_PATH = 'src_old'
+
+SOLUTION_PATH = 'src/sol.cpp'
+BRUTE_PATH = 'src/brute.cpp'
+GENERATOR_PATH = 'src/gen.cpp'
+CHECKER_PATH = 'src/checker.cpp'
+
+TERMINAL_UPDATE_TIME = 0.3
+
+MAX_LINES = 50
+MAX_LINE_LENGTH = 100
+
+no_test_passed = 0
+no_success = [0] * 4
+max_duration = [0] * 4
+accumulated_duration = [0] * 4
+program_titles = ["Generating input", "Running brute", "Running solution", "Comparing outputs"]
+
+def bold(text): return f"\033[1m{text}\033[0m"
+
+def yellow(text): return f"\033[33m{bold(text)}\033[0m"
+def green(text): return f"\033[32m{bold(text)}\033[0m"
+def red(text): return f"\033[31m{bold(text)}\033[0m"
+def magenta(text): return f"\033[95m{bold(text)}\033[0m"
+
+def compile_program(source, old, des, log):
+    if os.path.exists(source) and os.path.exists(old) and os.path.exists(f'{BINARY_PATH}/{des}'):
+        with open(source, 'r') as f1, open(old, 'r') as f2:
+            if f1.read() == f2.read():
+                print("- Compiling", yellow(source), magenta('- SKIPPED'))
+                return
+            
+    shutil.copyfile(source, old)
+    start = time.time()
+    crr = time.time()
+    no = 0
+    
+    with open(log, 'w') as f:
+        proc = subprocess.Popen(f'g++ {ARGUMENTS} {source} -o {BINARY_PATH}/{des}', stderr=f)
+        
+        while (proc.poll() == None):
+            end = time.time()
+            duration = end - crr
+
+            if duration > TERMINAL_UPDATE_TIME:  
+                crr = time.time()
+                no += 1
+                print("- Compiling", yellow(source), '.' * no)
+                no = no % 3
+                print("\033[1A\033[2K", end='')
+
+        end = time.time()
+        duration = end - start
+
+        if proc.returncode == 0:
+            print("- Compiling", yellow(source), green('✔ SUCCESS'), f'({duration:.3f}s)')
+        else:
+            print("- Compiling", yellow(source), red('✖ FAILED'), f'({duration:.3f}s)')
+            sys.exit(f'\n{red('ERROR')} Compilation for {yellow(source)} failed (see {yellow(log)} for details)')
+
+def run_program(path, program_index, in_path, out_path, timelimit, test_dir, test_no, queue, stop_event):
+    if stop_event.is_set():
+        return
+    
+    start = time.time()
+    with open(in_path, 'r') as in_file, open(out_path, 'w') as out_file:
+        proc = subprocess.Popen(path, stdin=in_file, stdout=out_file, stderr=subprocess.DEVNULL)
+
+        while (proc.poll() == None):
+            end = time.time()
+            elapsed = end - start
+
+            if elapsed > timelimit:
+                proc.kill()
+                raise Exception(f'\n{red(f'✖ TEST {test_no}')} Failed to execute {yellow(path)} {magenta('TIME LIMIT EXCEEDED')} (>{timelimit}s) (see {yellow(test_dir)} for test details)')
+        
+        if proc.returncode != 0:
+            raise Exception(f'\n{red(f'✖ TEST {test_no}')} Failed to execute {yellow(path)} {magenta('RUNTIME ERROR')} (exit code {proc.returncode}) (see {yellow(test_dir)} for test details)')
+
+    queue.put([program_index, end - start])
+
+def clear_folder(path):
+    for filename in os.listdir(path):
+        file_path = os.path.join(path, filename)
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.remove(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+
+def trim_content(path):
+    result_lines = []
+    hidden_lines = 0
+
+    with open(path, 'r') as f:
+        for i, line in enumerate(f):
+            line = line.rstrip()
+            if i < MAX_LINES:
+                if len(line) > MAX_LINE_LENGTH:
+                    line = line[:MAX_LINE_LENGTH - 3] + "..."
+                result_lines.append(line)
+            else:
+                hidden_lines += 1
+
+    if hidden_lines > 0:
+        result_lines.append("(...)")
+        result_lines.append(f"({hidden_lines} more hidden line(s))")
+
+    return "\n".join(result_lines)
+
+def run_test(i, queue, stop_event):
+    if stop_event.is_set():
+        return
+    
+    test_dir = OUTPUT_PATH + f'/test{i + 1}'
+    os.makedirs(test_dir)
+
+    test_in = test_dir + '/input.txt'
+    brute_out = test_dir + '/output_brute.txt'
+    sol_out = test_dir + '/output_solution.txt'
+    checker_out = test_dir + '/checker.txt'
+
+    run_program(BINARY_PATH + '/gen.exe', 0, OUTPUT_PATH + '/empty.txt', test_in, GENERATOR_TIMELIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/brute.exe', 1, test_in, brute_out, BRUTE_TIMELIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/sol.exe', 2, test_in, sol_out, SOLUTION_TIMELIMIT, test_dir, i + 1, queue, stop_event)
+    run_program([BINARY_PATH + '/checker.exe', sol_out, brute_out], 3, OUTPUT_PATH + '/empty.txt', checker_out, CHECKER_TIMELIMIT, test_dir, i + 1, queue, stop_event)
+
+    if stop_event.is_set():
+        return
+
+    checker_message = ''
+    with open(checker_out, 'r') as f:
+        checker_message = f.read()
+    
+    diff_path = LOG_PATH + '/diff.txt'
+    diff_sol = trim_content(sol_out)
+    diff_brute = trim_content(brute_out)
+
+    if checker_message != '':
+        if os.stat(diff_path).st_size == 0:
+            with open(diff_path, 'w') as f:
+                f.write('Your output:\n')
+                f.writelines(diff_sol)
+
+                f.write('\n\nBrute output:\n')
+                f.writelines(diff_brute)
+
+                f.write('\n\nChecker message:\n')
+                f.write(checker_message)
+        
+        os.startfile(os.path.abspath(diff_path))
+        raise Exception(f'\n{red(f'✖ TEST {i + 1} | {checker_message}')} (see {yellow(test_dir)} for test details)')
+
+    queue.put([-1, -1])
+
+def log(clear):
+    if clear == True:
+        for _ in range(5):
+            print("\033[1A", end='\r')
+    print(f'- {magenta(f'[{no_test_passed}/{MAX_TESTS}]')} Test(s) passed {magenta(f'({math.floor(no_test_passed / MAX_TESTS * 100)}%)')}')
+    for i in range(4):
+        print(f'   + {magenta(f'[{no_success[i]}/{MAX_TESTS}]')} ' + 
+            f'{program_titles[i]} ' +
+            magenta(f'({math.floor(no_success[i] / MAX_TESTS * 100)}%) ') +
+            yellow(f'({max_duration[i]:.3f}s max) ') +
+            green(f'({accumulated_duration[i]:.3f}s accumulated)'))
+        
+def log_listener(queue, stop_event):
+    while True:
+        msg = queue.get()
+        if msg == "__DONE__" or stop_event.is_set():
+            break
+
+        elapsed = msg[1]
+        index = msg[0]
+
+        if index != -1:
+            no_success[index] += 1
+            max_duration[index] = max(max_duration[index], elapsed)
+            accumulated_duration[index] += elapsed
+        else:
+            global no_test_passed
+            no_test_passed += 1
+        log(True)
+
+def main():
+    print('\033[?25l', end='')
+    compile_program(SOLUTION_PATH, OLD_PATH + '/sol.cpp', 'sol.exe', LOG_PATH + '/sol_compile.txt')
+    compile_program(BRUTE_PATH, OLD_PATH + '/brute.cpp', 'brute.exe', LOG_PATH + '/brute_compile.txt')
+    compile_program(GENERATOR_PATH, OLD_PATH + '/gen.cpp', 'gen.exe', LOG_PATH + '/gen_compile.txt')
+    compile_program(CHECKER_PATH, OLD_PATH + '/checker.cpp', 'checker.exe', LOG_PATH + '/checker_compile.txt')
+
+    clear_folder(OUTPUT_PATH)
+    open(LOG_PATH + '/diff.txt', 'w').close()
+    open(OUTPUT_PATH + '/empty.txt', 'w').close()
+
+    manager = Manager()
+    queue = manager.Queue()
+    stop_event = manager.Event()
+    start = time.time()
+
+    listener = Process(target=log_listener, args=(queue, stop_event))
+    listener.start()
+    log(False)
+    
+    all_passed = True
+    with ProcessPoolExecutor(max_workers=MAX_PARALLEL_PROCESSES) as executor:
+        futures = [executor.submit(run_test, i, queue, stop_event) for i in range(MAX_TESTS)]
+
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except Exception as e:
+                print(e)
+                print(red('Terminating tasks... Do not close the terminal!'))
+                stop_event.set() 
+
+                all_passed = False
+                for pending in futures:
+                    pending.cancel()
+                break  
+
+    queue.put("__DONE__")
+    listener.join()
+
+    if all_passed:
+        print(green(f'✔ All tests passed! ({(time.time() - start):.3f}s)'))
+    print('\033[?25h', end='')
+
+if __name__ == "__main__": 
+    main()
