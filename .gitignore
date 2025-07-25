@@ -1,8 +1,17 @@
-*.exe
-*.txt
-
 __pycache__/
 *.pyc
 
 out/*
 !out/.keep
+
+bin/*
+!bin/.keep
+
+logs/*
+!logs/.keep
+
+src/*
+!src/.keep
+
+src_old/*
+!src_old/.keep
