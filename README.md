@@ -28,7 +28,7 @@ pip install -r requirements.txt
 ### Config setup
 - Go to `config.py` and change some variables according to your setup. Here are some of the important ones:
   - `SOLUTION_PATH` - Path to your solution C++ file, defaulted at `src/sol.cpp` *(Note that `src/sol.cpp` is a **relative path**, if your C++ file is outside of the directory, use **full path** instead)*.
-  - `BRUTE_PATH` - 'src/brute.cpp' - Path to your brute force C++ file, same as `SOLUTION_PATH`.
+  - `BRUTE_PATH` - Path to your brute force C++ file, same as `SOLUTION_PATH`.
   - `SOLUTION_TIMELIMIT` - Time limit for your solution (in seconds).
   - `BRUTE_TIMELIMIT` - Time limit for your brute force (in seconds).
   - `MAX_TESTS` - The number of tests for your stress.
