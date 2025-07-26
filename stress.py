@@ -16,7 +16,7 @@ no_success = [0] * 4
 max_duration = [0] * 4
 accumulated_duration = [0] * 4
 peak_memory_usage = [0] * 4
-program_tasks = ["Generating input", "Running brute", "Running solution", "Comparing outputs"]
+program_tasks = ["Generating input", "Running brute", "Running solution", "Checking outputs"]
 
 def bold(text): return f"\033[1m{text}\033[0m"
 

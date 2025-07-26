@@ -5,7 +5,7 @@ ARGUMENTS: str = '-Wall -std=c++20 -g'
 
 # Testing 
 
-MAX_TESTS: int = 0
+MAX_TESTS: int = 100
 """Number of testcases to run in total. Set to 0 to enable infinite testing (only stopped by encountering an error or manual interruption)."""
 MAX_PARALLEL_PROCESSES: int = 2
 """Maximum number of parallel processes."""
