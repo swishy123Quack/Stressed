@@ -13,7 +13,7 @@ A competitive programming command line stress tester
 - Live progress in terminal
 
 ## Notes:
-- Memory/Time usage will probably not be accurate, but personally I rarely benchmark my solution locally. If you REALLY want to track your memory/time usage accurately, I recommend you do custom testing on on whatever sites you are submitting (Codeforces, Atcoder, ...).
+- Memory/Time usage will probably not be accurate, but personally I rarely benchmark my solution locally. If you REALLY want to track your memory/time usage accurately, I recommend you do custom testing on whatever sites you are submitting your solution (Codeforces, Atcoder, ...).
 - Parallel testing is possible, but should not be overused, check your CPU usage and limit them accordingly (In my case 2-4 works best).
 - [testlib](https://github.com/MikeMirzayanov/testlib) won't be used, since I find it way to overkill for my simple stress tester. Personally, I think [testlib](https://github.com/MikeMirzayanov/testlib) is better suited for online judges.
 
@@ -37,6 +37,8 @@ pip install -r requirements.txt
 ```bash
 python stress.py
 ```
+### Stop
+- Stress tester will be stopped if one of the processes exit abnormally (TLE, MLE, RTE) or from the checker. If you want to force stop, press `Ctrl+C` in your terminal.
 
 ## Custom Checker
 - Custom checker is supported, currently there is only one simple token implentation of the checker. If you want to add your own, make sure to follow this setup!
