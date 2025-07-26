@@ -4,7 +4,7 @@ A competitive programming command line stress tester
 ## WARNING: Mac/Unix support is NOT supported! Only run this on Windows.
 
 ## Summary:
-- This is my personal stress tester for competitive programming, so most of the features in this is tailored to my needs. If you find these helpful, feel free to use it! But don't expect it to have everything you need.
+- This is my personal stress tester for competitive programming, so most of the features in this are tailored to my needs. If you find these helpful, feel free to use it! But don't expect it to have everything you need.
 
 ## Main features:
 - Parallel testing support
@@ -39,7 +39,7 @@ python stress.py
 ```
 
 ## Custom Checker
-- Custom checker is supported, currently there is only one simple token implentation of the checker. If you want to want to add your own, make sure to follow this setup!
+- Custom checker is supported, currently there is only one simple token implentation of the checker. If you want to add your own, make sure to follow this setup!
 - **Path** to the output will be in `argv`, with `argv[1]` being the path to the solution output, and `argv[2]` being the brute force output path. So your code in `main()` should be something like this:
 ```cpp
 int main(int argc, char *argv[]){
