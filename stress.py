@@ -1,42 +1,22 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import Process, Manager
+from tabulate import tabulate
+from config import *
+
 import subprocess
 import shutil
+import psutil
 import time
 import math
 import sys
 import os
 
-ARGUMENTS = '-Wall -std=c++20 -g'
-
-MAX_TESTS = 100
-MAX_PARALLEL_PROCESSES = 2
-
-SOLUTION_TIMELIMIT = 10.0
-BRUTE_TIMELIMIT = 10.0
-GENERATOR_TIMELIMIT = 10.0
-CHECKER_TIMELIMIT = 10.0
-
-BINARY_PATH = 'bin'
-LOG_PATH = 'logs'
-OUTPUT_PATH = 'out'
-OLD_PATH = 'src_old'
-
-SOLUTION_PATH = 'src/sol.cpp'
-BRUTE_PATH = 'src/brute.cpp'
-GENERATOR_PATH = 'src/gen.cpp'
-CHECKER_PATH = 'src/checker.cpp'
-
-TERMINAL_UPDATE_TIME = 0.3
-
-MAX_LINES = 50
-MAX_LINE_LENGTH = 100
-
 no_test_passed = 0
 no_success = [0] * 4
 max_duration = [0] * 4
 accumulated_duration = [0] * 4
-program_titles = ["Generating input", "Running brute", "Running solution", "Comparing outputs"]
+peak_memory_usage = [0] * 4
+program_tasks = ["Generating input", "Running brute", "Running solution", "Comparing outputs"]
 
 def bold(text): return f"\033[1m{text}\033[0m"
 
@@ -80,17 +60,34 @@ def compile_program(source, old, des, log):
             print("- Compiling", yellow(source), red('✖ FAILED'), f'({duration:.3f}s)')
             sys.exit(f'\n{red('ERROR')} Compilation for {yellow(source)} failed (see {yellow(log)} for details)')
 
-def run_program(path, program_index, in_path, out_path, timelimit, test_dir, test_no, queue, stop_event):
+def run_program(path, program_index, in_path, out_path, timelimit, memorylimit, test_dir, test_no, queue, stop_event):
     if stop_event.is_set():
         return
     
     start = time.time()
+    peak_mem = 0.0
+
     with open(in_path, 'r') as in_file, open(out_path, 'w') as out_file:
         proc = subprocess.Popen(path, stdin=in_file, stdout=out_file, stderr=subprocess.DEVNULL)
+        ps_proc = psutil.Process(proc.pid)
 
         while (proc.poll() == None):
+            if stop_event.is_set():
+                proc.kill()
+                return
+            
             end = time.time()
             elapsed = end - start
+
+            try:
+                mem = ps_proc.memory_full_info()
+                peak_mem = max(peak_mem, mem.peak_wset / (1024 * 1024))
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                pass 
+
+            if peak_mem > memorylimit:
+                proc.kill()
+                raise Exception(f'\n{red(f'✖ TEST {test_no}')} Failed to execute {yellow(path)} {magenta('MEMORY LIMIT EXCEEDED')} (>{memorylimit}MB) (see {yellow(test_dir)} for test details)')
 
             if elapsed > timelimit:
                 proc.kill()
@@ -99,7 +96,7 @@ def run_program(path, program_index, in_path, out_path, timelimit, test_dir, tes
         if proc.returncode != 0:
             raise Exception(f'\n{red(f'✖ TEST {test_no}')} Failed to execute {yellow(path)} {magenta('RUNTIME ERROR')} (exit code {proc.returncode}) (see {yellow(test_dir)} for test details)')
 
-    queue.put([program_index, end - start])
+    queue.put([program_index, end - start, peak_mem])
 
 def clear_folder(path):
     for filename in os.listdir(path):
@@ -141,10 +138,10 @@ def run_test(i, queue, stop_event):
     sol_out = test_dir + '/output_solution.txt'
     checker_out = test_dir + '/checker.txt'
 
-    run_program(BINARY_PATH + '/gen.exe', 0, OUTPUT_PATH + '/empty.txt', test_in, GENERATOR_TIMELIMIT, test_dir, i + 1, queue, stop_event)
-    run_program(BINARY_PATH + '/brute.exe', 1, test_in, brute_out, BRUTE_TIMELIMIT, test_dir, i + 1, queue, stop_event)
-    run_program(BINARY_PATH + '/sol.exe', 2, test_in, sol_out, SOLUTION_TIMELIMIT, test_dir, i + 1, queue, stop_event)
-    run_program([BINARY_PATH + '/checker.exe', sol_out, brute_out], 3, OUTPUT_PATH + '/empty.txt', checker_out, CHECKER_TIMELIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/gen.exe', 0, OUTPUT_PATH + '/empty.txt', test_in, GENERATOR_TIMELIMIT, GENERATOR_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/brute.exe', 1, test_in, brute_out, BRUTE_TIMELIMIT, BRUTE_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/sol.exe', 2, test_in, sol_out, SOLUTION_TIMELIMIT, SOLUTION_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
+    run_program([BINARY_PATH + '/checker.exe', sol_out, brute_out], 3, OUTPUT_PATH + '/empty.txt', checker_out, CHECKER_TIMELIMIT, CHECKER_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
 
     if stop_event.is_set():
         return
@@ -154,13 +151,17 @@ def run_test(i, queue, stop_event):
         checker_message = f.read()
     
     diff_path = LOG_PATH + '/diff.txt'
+    diff_input = trim_content(test_in)
     diff_sol = trim_content(sol_out)
     diff_brute = trim_content(brute_out)
 
     if checker_message != '':
         if os.stat(diff_path).st_size == 0:
             with open(diff_path, 'w') as f:
-                f.write('Your output:\n')
+                f.write('Input:\n')
+                f.writelines(diff_input)
+
+                f.write('\n\nYour output:\n')
                 f.writelines(diff_sol)
 
                 f.write('\n\nBrute output:\n')
@@ -172,37 +173,51 @@ def run_test(i, queue, stop_event):
         os.startfile(os.path.abspath(diff_path))
         raise Exception(f'\n{red(f'✖ TEST {i + 1} | {checker_message}')} (see {yellow(test_dir)} for test details)')
 
-    queue.put([-1, -1])
+    queue.put([-1, -1, -1])
 
 def log(clear):
     if clear == True:
-        for _ in range(5):
+        for _ in range(10):
             print("\033[1A", end='\r')
-    print(f'- {magenta(f'[{no_test_passed}/{MAX_TESTS}]')} Test(s) passed {magenta(f'({math.floor(no_test_passed / MAX_TESTS * 100)}%)')}')
+
+    headers = ['Task', 'Passed', 'Progress', 'Max Time', 'Average Time', 'Max Memory']
+    rows = []
+
     for i in range(4):
-        print(f'   + {magenta(f'[{no_success[i]}/{MAX_TESTS}]')} ' + 
-            f'{program_titles[i]} ' +
-            magenta(f'({math.floor(no_success[i] / MAX_TESTS * 100)}%) ') +
-            yellow(f'({max_duration[i]:.3f}s max) ') +
-            green(f'({accumulated_duration[i]:.3f}s accumulated)'))
+        rows.append([program_tasks[i], 
+                     green(f'[{no_success[i]}/{MAX_TESTS}]'), 
+                     green(f'{math.floor(no_success[i] / MAX_TESTS * 100)}%'),
+                     magenta(f'{max_duration[i]:.3f}s'),
+                     magenta(f'{(accumulated_duration[i] / max(no_success[i], 1)):.3f}s'),
+                     yellow(f'{peak_memory_usage[i]:.3f} MB')])
+    
+    print()
+    print(tabulate(rows, headers=headers, tablefmt="outline", colalign=("left", "center", "center", "center", "center", "center")))
+    print()
         
 def log_listener(queue, stop_event):
-    while True:
-        msg = queue.get()
-        if msg == "__DONE__" or stop_event.is_set():
-            break
+    try:
+        while True:
+            msg = queue.get()
+            if msg == "__DONE__" or stop_event.is_set():
+                break
 
-        elapsed = msg[1]
-        index = msg[0]
+            elapsed = msg[1]
+            index = msg[0]
+            peak_mem = msg[2]
 
-        if index != -1:
-            no_success[index] += 1
-            max_duration[index] = max(max_duration[index], elapsed)
-            accumulated_duration[index] += elapsed
-        else:
-            global no_test_passed
-            no_test_passed += 1
-        log(True)
+            if index != -1:
+                no_success[index] += 1
+                max_duration[index] = max(max_duration[index], elapsed)
+                peak_memory_usage[index] = max(peak_memory_usage[index], peak_mem)
+                accumulated_duration[index] += elapsed
+            else:
+                global no_test_passed
+                no_test_passed += 1
+            log(True)
+    except KeyboardInterrupt:
+        print(red('Keyboard interupt!!'))
+        print(red('Terminating tasks... Do not close the terminal!'))
 
 def main():
     print('\033[?25l', end='')
@@ -225,21 +240,28 @@ def main():
     log(False)
     
     all_passed = True
-    with ProcessPoolExecutor(max_workers=MAX_PARALLEL_PROCESSES) as executor:
-        futures = [executor.submit(run_test, i, queue, stop_event) for i in range(MAX_TESTS)]
+    try:
+        with ProcessPoolExecutor(max_workers=MAX_PARALLEL_PROCESSES) as executor:
+            futures = [executor.submit(run_test, i, queue, stop_event) for i in range(MAX_TESTS)]
 
-        for f in as_completed(futures):
-            try:
-                f.result()
-            except Exception as e:
-                print(e)
-                print(red('Terminating tasks... Do not close the terminal!'))
-                stop_event.set() 
+            for f in as_completed(futures):
+                try:
+                    f.result()
+                except Exception as e:
+                    print(e)
+                    print(red('Terminating tasks... Do not close the terminal!'))
+                    stop_event.set() 
 
-                all_passed = False
-                for pending in futures:
-                    pending.cancel()
-                break  
+                    all_passed = False
+                    for pending in futures:
+                        pending.cancel()
+                    break  
+    except KeyboardInterrupt:
+        stop_event.set() 
+
+        all_passed = False
+        for pending in futures:
+            pending.cancel()
 
     queue.put("__DONE__")
     listener.join()

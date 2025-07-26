@@ -1,14 +1,14 @@
-stress/gen.cpp: In function 'std::vector<std::pair<std::pair<int, int>, int> > gen_tree(int, int)':
-stress/gen.cpp:36:53: warning: narrowing conversion of 'std::uniform_int_distribution<long long int>(1, ((long long int)bound)).std::uniform_int_distribution<long long int>::operator()<std::mersenne_twister_engine<unsigned int, 32, 624, 397, 31, 2567483615, 11, 4294967295, 7, 2636928640, 15, 4022730752, 18, 1812433253> >(rng)' from 'std::uniform_int_distribution<long long int>::result_type' {aka 'long long int'} to 'int' [-Wnarrowing]
+src/gen.cpp: In function 'std::vector<std::pair<std::pair<int, int>, int> > gen_tree(int, int)':
+src/gen.cpp:36:53: warning: narrowing conversion of 'std::uniform_int_distribution<long long int>(1, ((long long int)bound)).std::uniform_int_distribution<long long int>::operator()<std::mersenne_twister_engine<unsigned int, 32, 624, 397, 31, 2567483615, 11, 4294967295, 7, 2636928640, 15, 4022730752, 18, 1812433253> >(rng)' from 'std::uniform_int_distribution<long long int>::result_type' {aka 'long long int'} to 'int' [-Wnarrowing]
    36 | #define uid(a, b) uniform_int_distribution<ll>(a, b)(rng)
       |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
-stress/gen.cpp:149:42: note: in expansion of macro 'uid'
+src/gen.cpp:149:42: note: in expansion of macro 'uid'
   149 |         weighted_edge.push_back({{u, v}, uid(1, bound)});
       |                                          ^~~
-stress/gen.cpp: In function 'std::vector<std::pair<std::pair<int, int>, int> > gen_graph(int, int, int)':
-stress/gen.cpp:36:53: warning: narrowing conversion of 'std::uniform_int_distribution<long long int>(1, ((long long int)bound)).std::uniform_int_distribution<long long int>::operator()<std::mersenne_twister_engine<unsigned int, 32, 624, 397, 31, 2567483615, 11, 4294967295, 7, 2636928640, 15, 4022730752, 18, 1812433253> >(rng)' from 'std::uniform_int_distribution<long long int>::result_type' {aka 'long long int'} to 'int' [-Wnarrowing]
+src/gen.cpp: In function 'std::vector<std::pair<std::pair<int, int>, int> > gen_graph(int, int, int)':
+src/gen.cpp:36:53: warning: narrowing conversion of 'std::uniform_int_distribution<long long int>(1, ((long long int)bound)).std::uniform_int_distribution<long long int>::operator()<std::mersenne_twister_engine<unsigned int, 32, 624, 397, 31, 2567483615, 11, 4294967295, 7, 2636928640, 15, 4022730752, 18, 1812433253> >(rng)' from 'std::uniform_int_distribution<long long int>::result_type' {aka 'long long int'} to 'int' [-Wnarrowing]
    36 | #define uid(a, b) uniform_int_distribution<ll>(a, b)(rng)
       |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
-stress/gen.cpp:155:58: note: in expansion of macro 'uid'
+src/gen.cpp:155:58: note: in expansion of macro 'uid'
   155 |         graph.push_back({{uid(0, n - 1), uid(0, n - 1)}, uid(1, bound)});
       |                                                          ^~~

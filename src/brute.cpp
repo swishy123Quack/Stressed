@@ -114,8 +114,12 @@ const ll mod = 1e9+7;
 void solve(){  
     int n, m;
     read(n, m);
+    int bruh = 0;
+    for (int i = 0; i < 1'000'000'000; i++)
+        bruh++;
+    if (uid(0, 5 == 0))
+        print("epic");
     for (int i = 0; i < n; i++) for (int j = 0; j < m; j++){
-        print(i * m + j);
         if (j == m - 1)
             nl;
     }
