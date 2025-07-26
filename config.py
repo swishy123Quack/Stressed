@@ -5,10 +5,12 @@ ARGUMENTS: str = '-Wall -std=c++20 -g'
 
 # Testing 
 
-MAX_TESTS: int = 69
-"""Number of testcases to run in total."""
-MAX_PARALLEL_PROCESSES: int = 4
+MAX_TESTS: int = 0
+"""Number of testcases to run in total. Set to 0 to enable infinite testing (only stopped by encountering an error or manual interruption)."""
+MAX_PARALLEL_PROCESSES: int = 2
 """Maximum number of parallel processes."""
+MAX_STORED_TESTS: int = 50
+"""Maximum number of stored tests in the output directory. Set to 0 to disable test storage limit."""
 
 # Limits
 
@@ -21,7 +23,7 @@ GENERATOR_TIMELIMIT: float = 10.0
 CHECKER_TIMELIMIT: float = 10.0
 """Checker time limit in seconds."""
 
-SOLUTION_MEMORYLIMIT: float = 6
+SOLUTION_MEMORYLIMIT: float = 512
 """Solution memory limit in MB."""
 BRUTE_MEMORYLIMIT: float = 512
 """Brute memory limit in MB."""
@@ -51,6 +53,6 @@ CHECKER_PATH: str = 'src/checker.cpp'
 TERMINAL_UPDATE_TIME: float = 0.3
 """Terminal refresh rate in seconds (Don't change this, unnecesary)."""
 MAX_LINES: int = 50
-"""Maximum number of lines when displaying output of diff file."""
+"""Maximum number of lines when displaying outputs on diff file."""
 MAX_LINE_LENGTH: int = 100
-"""Maximum number of characters per line when displaying output of diff file."""
+"""Maximum number of characters per line when displaying outputs on diff file."""

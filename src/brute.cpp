@@ -109,24 +109,74 @@ auto vec(size_t n, Args&&... args) {
 using namespace std;
 const ll inf = 1e9;
 const ll def = 1e6+1;
-const ll mod = 1e9+7;
+ll mod = 998244353;
+
+struct modu{
+    ll val;
+    modu(ll x){
+        val = x;
+        val %= mod;
+        if (val < 0) val += mod;    
+    }
+    modu(){ val = 0; }
+ 
+    operator ll() const { return val; }
+    modu operator+(modu const& other){ return val + other.val; }
+    modu operator-(modu const& other){ return val - other.val; }
+    modu operator*(modu const& other){ return val * other.val; }
+    modu operator/(modu const& other){ return *this * other.inv(); }
+    modu operator+=(modu const& other) { *this = *this + other; return *this; }
+    modu operator-=(modu const& other) { *this = *this - other; return *this; }
+    modu operator*=(modu const& other) { *this = *this * other; return *this; }
+    modu operator/=(modu const& other) { *this = *this / other; return *this; }
+    modu operator++(int) {modu tmp = *this; *this += 1; return tmp;}
+    modu operator++() {*this += 1; return *this;}
+    modu operator--(int) {modu tmp = *this; *this -= 1; return tmp;}
+    modu operator--() {*this -= 1; return *this;}
+    modu operator-() {return modu(-val);}
+    friend ostream& operator<<(ostream& os, modu const& m) { return os << m.val; }
+    friend istream& operator>>(istream& is, modu & m) { return is >> m.val; }
+ 
+    modu pow(ll x) const{
+        if (x == 0) 
+            return 1;
+        if (x % 2 == 0){
+            modu tmp = pow(x / 2);
+            return tmp * tmp;
+        }
+        else
+            return pow(x - 1) * *this;
+    }
+ 
+    modu inv() const{ return pow(mod - 2); }
+};
 
 void solve(){  
     int n, m;
     read(n, m);
-    int bruh = 0;
-    for (int i = 0; i < 1'000'000'000; i++)
-        bruh++;
-    if (uid(0, 5 == 0))
-        print("epic");
     for (int i = 0; i < n; i++) for (int j = 0; j < m; j++){
+        print(i * m + j + uid(0, 1));
         if (j == m - 1)
             nl;
     }
 }         
 
 /*
+bruh
+4 5 6 -> 1 2 3 -> 3 4 5 -> 1 1 2 3 -> 4 5 6
+4 6 8 -> 1 3 5 -> 4 6 8 
+2 7 9 12 -> 1 4 6 11 -> x
 
+1 + (1 + a4 - a3) + (1 + a4 - a2) + (1 + a4 - a1) = (an + 1) * n - sn
+
+(an + 1) * n - sn - (1 + an - a1) <= a1
+=> (an + 1) * (n - 1) - s(n - 1) - an <= 0
+
+
+0 1 0 1 0 1
+0 0 1 0 0 1
+0 0 0 1 0 0 
+1 1
 */
 
 int32_t main(){

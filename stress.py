@@ -71,11 +71,7 @@ def run_program(path, program_index, in_path, out_path, timelimit, memorylimit, 
         proc = subprocess.Popen(path, stdin=in_file, stdout=out_file, stderr=subprocess.DEVNULL)
         ps_proc = psutil.Process(proc.pid)
 
-        while (proc.poll() == None):
-            if stop_event.is_set():
-                proc.kill()
-                return
-            
+        while (proc.poll() == None):            
             end = time.time()
             elapsed = end - start
 
@@ -126,22 +122,26 @@ def trim_content(path):
 
     return "\n".join(result_lines)
 
-def run_test(i, queue, stop_event):
+def run_test(i, queue, test_queue, stop_event):
     if stop_event.is_set():
         return
     
     test_dir = OUTPUT_PATH + f'/test{i + 1}'
     os.makedirs(test_dir)
+    test_queue.put(test_dir)
 
     test_in = test_dir + '/input.txt'
     brute_out = test_dir + '/output_brute.txt'
     sol_out = test_dir + '/output_solution.txt'
     checker_out = test_dir + '/checker.txt'
+    
+    if test_queue.qsize() > MAX_STORED_TESTS and MAX_STORED_TESTS > 0:
+        shutil.rmtree(test_queue.get())
 
-    run_program(BINARY_PATH + '/gen.exe', 0, OUTPUT_PATH + '/empty.txt', test_in, GENERATOR_TIMELIMIT, GENERATOR_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
+    run_program(BINARY_PATH + '/gen.exe', 0, LOG_PATH + '/empty.txt', test_in, GENERATOR_TIMELIMIT, GENERATOR_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
     run_program(BINARY_PATH + '/brute.exe', 1, test_in, brute_out, BRUTE_TIMELIMIT, BRUTE_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
     run_program(BINARY_PATH + '/sol.exe', 2, test_in, sol_out, SOLUTION_TIMELIMIT, SOLUTION_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
-    run_program([BINARY_PATH + '/checker.exe', sol_out, brute_out], 3, OUTPUT_PATH + '/empty.txt', checker_out, CHECKER_TIMELIMIT, CHECKER_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
+    run_program([BINARY_PATH + '/checker.exe', sol_out, brute_out], 3, LOG_PATH + '/empty.txt', checker_out, CHECKER_TIMELIMIT, CHECKER_MEMORYLIMIT, test_dir, i + 1, queue, stop_event)
 
     if stop_event.is_set():
         return
@@ -185,8 +185,8 @@ def log(clear):
 
     for i in range(4):
         rows.append([program_tasks[i], 
-                     green(f'[{no_success[i]}/{MAX_TESTS}]'), 
-                     green(f'{math.floor(no_success[i] / MAX_TESTS * 100)}%'),
+                     green(f'{no_success[i]}/{MAX_TESTS}') if MAX_TESTS > 0 else green(f'{no_success[i]}/∞'), 
+                     green(f'{math.floor(no_success[i] / MAX_TESTS * 100)}%') if MAX_TESTS > 0 else 'NaN',
                      magenta(f'{max_duration[i]:.3f}s'),
                      magenta(f'{(accumulated_duration[i] / max(no_success[i], 1)):.3f}s'),
                      yellow(f'{peak_memory_usage[i]:.3f} MB')])
@@ -195,7 +195,7 @@ def log(clear):
     print(tabulate(rows, headers=headers, tablefmt="outline", colalign=("left", "center", "center", "center", "center", "center")))
     print()
         
-def log_listener(queue, stop_event):
+def log_listener(queue, test_queue, stop_event):
     try:
         while True:
             msg = queue.get()
@@ -216,11 +216,12 @@ def log_listener(queue, stop_event):
                 no_test_passed += 1
             log(True)
     except KeyboardInterrupt:
+        stop_event.set() 
         print(red('Keyboard interupt!!'))
         print(red('Terminating tasks... Do not close the terminal!'))
 
 def main():
-    print('\033[?25l', end='')
+    print('\033[?25l', end='')  
     compile_program(SOLUTION_PATH, OLD_PATH + '/sol.cpp', 'sol.exe', LOG_PATH + '/sol_compile.txt')
     compile_program(BRUTE_PATH, OLD_PATH + '/brute.cpp', 'brute.exe', LOG_PATH + '/brute_compile.txt')
     compile_program(GENERATOR_PATH, OLD_PATH + '/gen.cpp', 'gen.exe', LOG_PATH + '/gen_compile.txt')
@@ -228,34 +229,41 @@ def main():
 
     clear_folder(OUTPUT_PATH)
     open(LOG_PATH + '/diff.txt', 'w').close()
-    open(OUTPUT_PATH + '/empty.txt', 'w').close()
+    open(LOG_PATH + '/empty.txt', 'w').close()
 
     manager = Manager()
     queue = manager.Queue()
+    test_queue = manager.Queue()
     stop_event = manager.Event()
     start = time.time()
 
-    listener = Process(target=log_listener, args=(queue, stop_event))
+    listener = Process(target=log_listener, args=(queue, test_queue, stop_event))
     listener.start()
     log(False)
     
     all_passed = True
     try:
         with ProcessPoolExecutor(max_workers=MAX_PARALLEL_PROCESSES) as executor:
-            futures = [executor.submit(run_test, i, queue, stop_event) for i in range(MAX_TESTS)]
+            futures = set()
+            test_id = 0
+            while test_id < MAX_TESTS or MAX_TESTS == 0:
+                futures.add(executor.submit(run_test, test_id, queue, test_queue, stop_event))
+                test_id += 1
 
-            for f in as_completed(futures):
-                try:
-                    f.result()
-                except Exception as e:
-                    print(e)
-                    print(red('Terminating tasks... Do not close the terminal!'))
-                    stop_event.set() 
-
-                    all_passed = False
-                    for pending in futures:
-                        pending.cancel()
-                    break  
+                if len(futures) >= 2 * MAX_PARALLEL_PROCESSES or (MAX_TESTS > 0 and test_id >= MAX_TESTS):
+                    done, futures = as_completed(futures), set()
+                    for f in done:
+                        try:
+                            f.result()
+                        except Exception as e:
+                            print(e)
+                            print(red('Terminating tasks... Do not close the terminal!'))
+                            stop_event.set() 
+                            all_passed = False
+                            break
+                    if not all_passed:
+                        break
+                    
     except KeyboardInterrupt:
         stop_event.set() 
 
@@ -265,7 +273,7 @@ def main():
 
     queue.put("__DONE__")
     listener.join()
-
+    
     if all_passed:
         print(green(f'✔ All tests passed! ({(time.time() - start):.3f}s)'))
     print('\033[?25h', end='')
